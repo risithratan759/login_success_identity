@@ -1199,7 +1199,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     name: _nameCtl.text.trim(),
                     title: _designationCtl.text.trim(),
                     about: _lifeMotoCtl.text.trim(),
-                    avatarUrl: "", // live Firestore fetch inside preview
+                    //avatarUrl: "", // live Firestore fetch inside preview
+                    avatarUrl: _profileUrlCtl.text.trim(),
+
                     email: _emailCtl.text.trim(),
                     phone: _phoneCtl.text.trim(),
                     website: _websiteCtl.text.trim(),

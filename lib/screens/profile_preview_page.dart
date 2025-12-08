@@ -240,7 +240,7 @@ class ProfilePreviewPage extends StatelessWidget {
   }
 }
 */
-import 'dart:typed_data';
+/*import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show NetworkAssetBundle;
 import 'package:pdf/widgets.dart' as pw;
@@ -515,3 +515,236 @@ class _ProfilePreviewPageState extends State<ProfilePreviewPage> {
   }
 }
 
+*/
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:qr_flutter/qr_flutter.dart';
+
+class ProfilePreviewPage extends StatefulWidget {
+  final String name;
+  final String title;
+  final String about;
+  final String avatarUrl;
+  final String email;
+  final String phone;
+  final String website;
+  final String profileUrl;
+
+  const ProfilePreviewPage({
+    super.key,
+    this.name = '',
+    this.title = '',
+    this.about = '',
+    this.avatarUrl = '',
+    this.email = '',
+    this.phone = '',
+    this.website = '',
+    this.profileUrl = '',
+  });
+
+  @override
+  State<ProfilePreviewPage> createState() => _ProfilePreviewPageState();
+}
+
+class _ProfilePreviewPageState extends State<ProfilePreviewPage> {
+  final uid = FirebaseAuth.instance.currentUser!.uid;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection("users")
+          .doc(uid)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final data = snap.data!.data() as Map<String, dynamic>? ?? {};
+
+        final photo = data["photo"] ?? "";
+        final name = data["name"] ?? widget.name;
+        final title = data["designation"] ?? widget.title;
+        final about = data["life_motto"] ?? widget.about;
+        final email = data["email"] ?? widget.email;
+        final phone = data["phone"] ?? widget.phone;
+        final website = data["website"] ?? widget.website;
+        final profileUrl = data["profileUrl"] ?? widget.profileUrl;
+
+        return Scaffold(
+          appBar: AppBar(title: const Text("Profile Preview")),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                // ---------------- AVATAR ----------------
+                CircleAvatar(
+                  radius: 55,
+                  backgroundImage:
+                      photo.isNotEmpty ? NetworkImage(photo) : null,
+                  child: photo.isEmpty
+                      ? const Icon(Icons.person, size: 55)
+                      : null,
+                ),
+                const SizedBox(height: 16),
+
+                // ---------------- NAME ----------------
+                Text(
+                  name,
+                  style: const TextStyle(
+                      fontSize: 26, fontWeight: FontWeight.bold),
+                ),
+
+                // ---------------- TITLE ----------------
+                Text(
+                  title,
+                  style: const TextStyle(
+                      fontSize: 17, color: Colors.black54),
+                ),
+                const SizedBox(height: 20),
+
+                // ---------------- CONTACT INFO ----------------
+                Wrap(
+                  spacing: 20,
+                  children: [
+                    if (email.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.email, size: 18),
+                          const SizedBox(width: 6),
+                          Text(email),
+                        ],
+                      ),
+                    if (phone.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.phone, size: 18),
+                          const SizedBox(width: 6),
+                          Text(phone),
+                        ],
+                      ),
+                    if (website.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.language, size: 18),
+                          const SizedBox(width: 6),
+                          Text(website),
+                        ],
+                      ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                // ---------------- ABOUT ----------------
+                Text(
+                  about,
+                  style: const TextStyle(fontSize: 15),
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 20),
+
+                // ---------------- QR CODE ----------------
+                if (profileUrl.isNotEmpty)
+                  Column(
+                    children: [
+                      QrImageView(data: profileUrl, size: 150),
+                      const SizedBox(height: 8),
+                      const Text("Shareable QR Profile",
+                          style: TextStyle(color: Colors.black54)),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+
+          // ---------------- BOTTOM BUTTONS ----------------
+          bottomNavigationBar: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final pdf = await _buildPdf(name, title, about, email,
+                        phone, website, profileUrl, photo);
+                    await Printing.layoutPdf(onLayout: (_) => pdf);
+                  },
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text("Export PDF"),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------- PDF GENERATOR ----------------
+  Future<Uint8List> _buildPdf(String name, String title, String about,
+      String email, String phone, String website, String url, String photoUrl) async {
+    final pdf = pw.Document();
+
+    pw.ImageProvider? avatar;
+    if (photoUrl.isNotEmpty) {
+      final bytes = await NetworkAssetBundle(Uri.parse(photoUrl))
+          .load(photoUrl);
+      avatar = pw.MemoryImage(bytes.buffer.asUint8List());
+    }
+
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) => pw.Column(
+          mainAxisAlignment: pw.MainAxisAlignment.center,
+          children: [
+            if (avatar != null)
+              pw.Container(
+                width: 110,
+                height: 110,
+                child: pw.ClipOval(child: pw.Image(avatar!)),
+              ),
+            pw.SizedBox(height: 16),
+
+            pw.Text(name,
+                style: pw.TextStyle(
+                    fontSize: 24, fontWeight: pw.FontWeight.bold)),
+            pw.Text(title),
+            pw.SizedBox(height: 16),
+
+            pw.Text(about, textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 20),
+
+            pw.Text("Email: $email"),
+            pw.Text("Phone: $phone"),
+            pw.Text("Website: $website"),
+
+            if (url.isNotEmpty) ...[
+              pw.SizedBox(height: 20),
+              pw.BarcodeWidget(
+                data: url,
+                width: 120,
+                height: 120,
+                barcode: pw.Barcode.qrCode(),
+              ),
+            ]
+          ],
+        ),
+      ),
+    );
+
+    return pdf.save();
+  }
+}
