@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/user_service.dart';
+import 'edit_profile_page.dart';
 
 class WelcomePage extends StatelessWidget {
   const WelcomePage({super.key});
@@ -22,9 +24,25 @@ class WelcomePage extends StatelessWidget {
         ],
       ),
       body: Center(
-        child: Text(
-          "Welcome, ${user?.email}",
-          style: const TextStyle(fontSize: 22),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              "Welcome, ${user?.email}",
+              style: const TextStyle(fontSize: 22),
+            ),
+            const SizedBox(height: 25),
+
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EditProfilePage()),
+                );
+              },
+              child: const Text("Edit Profile"),
+            ),
+          ],
         ),
       ),
     );
