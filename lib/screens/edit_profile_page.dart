@@ -931,7 +931,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 // Compatible with LinkedIn-style ProfilePreviewPage
 // With: website + profileUrl + proper preview navigation
 // ---------------------------
-
+/*
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -1422,3 +1422,416 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 }
 
+*/// lib/screens/edit_profile_page.dart
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+
+import 'profile_preview_page.dart';
+
+class EditProfilePage extends StatefulWidget {
+  const EditProfilePage({super.key});
+
+  @override
+  State<EditProfilePage> createState() => _EditProfilePageState();
+}
+
+class _EditProfilePageState extends State<EditProfilePage> {
+  // CONTROLLERS ----------------------------------------------------------
+  final _nameCtl = TextEditingController();
+  final _phoneCtl = TextEditingController();
+  final _designationCtl = TextEditingController();
+  final _lifeMotoCtl = TextEditingController();
+  final _emailCtl = TextEditingController();
+  final _websiteCtl = TextEditingController();
+  final _profileUrlCtl = TextEditingController();
+
+  // ERROR LABELS
+  String? _nameError;
+  String? _phoneError;
+  String? _mottoError;
+
+  // STATE
+  File? _localImage;
+  bool _loading = true;
+  bool _saving = false;
+  Timer? _debounce;
+
+  // FIREBASE
+  final _picker = ImagePicker();
+  final _auth = FirebaseAuth.instance;
+  final _fire = FirebaseFirestore.instance;
+
+  String get uid => _auth.currentUser!.uid;
+  DocumentReference<Map<String, dynamic>> get userDoc =>
+      _fire.collection('users').doc(uid);
+
+  // INIT -----------------------------------------------------------------
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+
+    for (final ctl in [
+      _nameCtl,
+      _phoneCtl,
+      _designationCtl,
+      _lifeMotoCtl,
+      _websiteCtl,
+      _profileUrlCtl,
+    ]) {
+      ctl.addListener(_onFieldChange);
+    }
+  }
+
+  // FETCH USER DATA ------------------------------------------------------
+  Future<void> _loadData() async {
+    try {
+      final snap = await userDoc.get();
+      final d = snap.data() ?? {};
+
+      _nameCtl.text = d['name'] ?? '';
+      _phoneCtl.text = d['phone'] ?? '';
+      _designationCtl.text = d['designation'] ?? '';
+      _lifeMotoCtl.text = d['life_motto'] ?? '';
+      _emailCtl.text = d['email'] ?? _auth.currentUser?.email ?? '';
+      _websiteCtl.text = d['website'] ?? '';
+      _profileUrlCtl.text = d['profileUrl'] ?? '';
+      // load existing photo into _localImage is intentionally not done,
+      // preview reads network image from Firestore 'photo' field.
+    } catch (e) {
+      debugPrint("Load failed: $e");
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // AUTO SAVE ------------------------------------------------------------
+  void _onFieldChange() {
+    setState(() {
+      _nameError = null;
+      _phoneError = null;
+      _mottoError = null;
+    });
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 800), () => _autoSave());
+  }
+
+  Future<void> _autoSave() async {
+    if (!_validate(autoSave: true)) return;
+
+    try {
+      await userDoc.set({
+        "name": _nameCtl.text.trim(),
+        "phone": _phoneCtl.text.trim(),
+        "designation": _designationCtl.text.trim(),
+        "life_motto": _lifeMotoCtl.text.trim(),
+        "email": _emailCtl.text.trim(),
+        "website": _websiteCtl.text.trim(),
+        "profileUrl": _profileUrlCtl.text.trim(),
+        "updatedAt": FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint("AUTO SAVE FAILED → $e");
+    }
+  }
+
+  // VALIDATION -----------------------------------------------------------
+  bool _validate({bool autoSave = false}) {
+    bool ok = true;
+
+    if (_nameCtl.text.trim().isEmpty) {
+      _nameError = "Name required";
+      ok = false;
+    } else {
+      _nameError = null;
+    }
+
+    final p = _phoneCtl.text.replaceAll(RegExp(r'\D'), '');
+    if (p.isNotEmpty && p.length < 10) {
+      _phoneError = "Invalid phone";
+      ok = false;
+    } else {
+      _phoneError = null;
+    }
+
+    if (_lifeMotoCtl.text.length > 120) {
+      _mottoError = "Max 120 characters";
+      ok = false;
+    } else {
+      _mottoError = null;
+    }
+
+    if (!autoSave) setState(() {});
+    return ok;
+  }
+
+  // IMAGE PICK -----------------------------------------------------------
+  Future<void> _pickImage() async {
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1000,
+      imageQuality: 85,
+    );
+
+    if (picked != null) {
+      setState(() => _localImage = File(picked.path));
+    }
+  }
+
+  // SAVE PROFILE ---------------------------------------------------------
+  Future<void> _saveProfile() async {
+    if (!_validate()) return;
+
+    setState(() => _saving = true);
+
+    try {
+      String? photoUrl;
+
+      if (_localImage != null) {
+        final ref = FirebaseStorage.instance.ref("profile_photos/$uid.jpg");
+        await ref.putFile(_localImage!);
+        photoUrl = await ref.getDownloadURL();
+      }
+
+      await userDoc.set({
+        "name": _nameCtl.text.trim(),
+        "phone": _phoneCtl.text.trim(),
+        "designation": _designationCtl.text.trim(),
+        "life_motto": _lifeMotoCtl.text.trim(),
+        "email": _emailCtl.text.trim(),
+        "website": _websiteCtl.text.trim(),
+        "profileUrl": _profileUrlCtl.text.trim(),
+        if (photoUrl != null) "photo": photoUrl,
+        "updatedAt": FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Profile saved successfully")));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Failed: $e")));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  // GLASS CONTAINER ------------------------------------------------------
+  Widget glass({required Widget child, EdgeInsets? padding}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: padding ?? const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  // UI -------------------------------------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+          body: Center(child: CircularProgressIndicator()));
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Edit Profile"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.remove_red_eye),
+            onPressed: () {
+              // OPEN preview page (no parameters) — preview reads Firestore directly
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfilePreviewPage()),
+              );
+            },
+          )
+        ],
+      ),
+
+      body: Stack(
+        children: [
+          // Background Gradient
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.blueGrey.shade900,
+                  Colors.teal.shade700,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+
+          // Main Content
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                // Avatar Card
+                glass(
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: CircleAvatar(
+                          radius: 45,
+                          backgroundColor: Colors.white24,
+                          backgroundImage: _localImage != null
+                              ? FileImage(_localImage!)
+                              : null,
+                          child: _localImage == null
+                              ? const Icon(Icons.camera_alt,
+                                  color: Colors.white, size: 40)
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _nameCtl.text.isEmpty
+                                  ? "Your Name"
+                                  : _nameCtl.text,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              _designationCtl.text.isEmpty
+                                  ? "Designation"
+                                  : _designationCtl.text,
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+
+                // Form Card
+                const SizedBox(height: 16),
+                glass(
+                  child: Column(
+                    children: [
+                      _field("Full Name", _nameCtl, error: _nameError),
+                      _field("Designation", _designationCtl),
+                      _field("Life Motto", _lifeMotoCtl,
+                          maxLines: 2, error: _mottoError),
+                      _field("Phone", _phoneCtl,
+                          keyboard: TextInputType.phone,
+                          error: _phoneError),
+                      _field("Website", _websiteCtl),
+                      _field("Public Profile URL (QR)", _profileUrlCtl),
+                      _field("Email (read-only)", _emailCtl, readOnly: true),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: _saving
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.save),
+                        label: Text(_saving ? "Saving..." : "Save"),
+                        onPressed: _saving ? null : _saveProfile,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      child: const Text("Preview"),
+                      onPressed: () {
+                        // OPEN preview page (no parameters)
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ProfilePreviewPage()),
+                        );
+                      },
+                    )
+                  ],
+                ),
+
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Text Field Builder
+  Widget _field(
+    String label,
+    TextEditingController ctl, {
+    bool readOnly = false,
+    String? error,
+    int maxLines = 1,
+    TextInputType? keyboard,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: TextField(
+        controller: ctl,
+        readOnly: readOnly,
+        maxLines: maxLines,
+        keyboardType: keyboard,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label,
+          errorText: error,
+          labelStyle: const TextStyle(color: Colors.white70),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _nameCtl.dispose();
+    _phoneCtl.dispose();
+    _designationCtl.dispose();
+    _lifeMotoCtl.dispose();
+    _emailCtl.dispose();
+    _websiteCtl.dispose();
+    _profileUrlCtl.dispose();
+    super.dispose();
+  }
+}
