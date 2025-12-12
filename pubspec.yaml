@@ -39,7 +39,7 @@ dependencies:
   firebase_auth: ^6.1.2
   cloud_firestore: ^6.1.0
   firebase_storage: ^13.0.4
-  google_sign_in: ^7.2.0
+  #google_sign_in: ^7.2.0
   firebase_messaging: ^16.0.4
   lottie: ^3.3.2
   animate_do: ^4.2.0
@@ -59,7 +59,8 @@ dependencies:
   screenshot: ^3.0.0
   url_launcher: ^6.3.2
   font_awesome_flutter: ^10.12.0
-  
+  #google_identity_services_web: ^0.3.3+1
+  google_sign_in: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -88,6 +89,7 @@ flutter:
     - assets/splash.json
     - assets/images/
     - assets/
+    - assets/login_bg.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
