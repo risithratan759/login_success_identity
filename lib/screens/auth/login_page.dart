@@ -128,11 +128,13 @@ class _LoginPageState extends State<LoginPage>
         MaterialPageRoute(builder: (_) => const WelcomePage()),
       );
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -154,14 +156,16 @@ class _LoginPageState extends State<LoginPage>
       if (googleUser == null) {
         // user cancelled
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('Google sign-in cancelled')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Google sign-in cancelled')),
+          );
         }
         return;
       }
 
       // Obtain the auth details from the request
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
       // Create a new credential
       final credential = GoogleAuthProvider.credential(
@@ -180,13 +184,15 @@ class _LoginPageState extends State<LoginPage>
       );
     } on FirebaseAuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Google sign-in failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Google sign-in failed: $e')));
       }
     } finally {
       if (mounted) setState(() => loading = false);
@@ -202,8 +208,24 @@ class _LoginPageState extends State<LoginPage>
       body: Stack(
         children: [
           Positioned.fill(
-            child: Lottie.asset('assets/login_bg.json', fit: BoxFit.cover),
+            child: Lottie.asset(
+              'assets/login_bg.json',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                // Fallback UI if Lottie JSON fails
+                return Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF4A00E0), Color(0xFF8E2DE2)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
+
           Container(color: isDark ? Colors.black45 : Colors.white24),
           Center(
             child: FadeTransition(
@@ -213,14 +235,27 @@ class _LoginPageState extends State<LoginPage>
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(22),
-                  color: isDark ? Colors.black.withOpacity(0.45) : Colors.white.withOpacity(0.40),
+                  color: isDark
+                      ? Colors.black.withOpacity(0.45)
+                      : Colors.white.withOpacity(0.40),
                   border: Border.all(color: Colors.white.withOpacity(0.3)),
-                  boxShadow: [BoxShadow(blurRadius: 20, color: Colors.black.withOpacity(0.2))],
+                  boxShadow: [
+                    BoxShadow(
+                      blurRadius: 20,
+                      color: Colors.black.withOpacity(0.2),
+                    ),
+                  ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Welcome Back 👋', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Welcome Back 👋',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     TextField(
@@ -231,7 +266,9 @@ class _LoginPageState extends State<LoginPage>
                         prefixIcon: const Icon(Icons.email),
                         filled: true,
                         fillColor: isDark ? Colors.white10 : Colors.white70,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -244,14 +281,21 @@ class _LoginPageState extends State<LoginPage>
                         prefixIcon: const Icon(Icons.lock),
                         filled: true,
                         fillColor: isDark ? Colors.white10 : Colors.white70,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
                     ),
 
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordPage())),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ForgotPasswordPage(),
+                          ),
+                        ),
                         child: const Text('Forgot Password?'),
                       ),
                     ),
@@ -262,14 +306,37 @@ class _LoginPageState extends State<LoginPage>
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: loading ? null : loginUser,
-                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                        child: loading ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Login'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: loading
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Login'),
                       ),
                     ),
 
                     const SizedBox(height: 12),
 
-                    Row(children: const [Expanded(child: Divider()), Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('OR')), Expanded(child: Divider())]),
+                    Row(
+                      children: const [
+                        Expanded(child: Divider()),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Text('OR'),
+                        ),
+                        Expanded(child: Divider()),
+                      ],
+                    ),
                     const SizedBox(height: 12),
 
                     SizedBox(
@@ -278,15 +345,29 @@ class _LoginPageState extends State<LoginPage>
                         icon: const FaIcon(FontAwesomeIcons.google, size: 18),
                         label: const Text('Login with Google'),
                         onPressed: loading ? null : signInWithGoogle,
-                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
                       ),
                     ),
 
                     const SizedBox(height: 18),
 
                     GestureDetector(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterPage())),
-                      child: const Text('Create a new account', style: TextStyle(decoration: TextDecoration.underline, fontSize: 15)),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const RegisterPage()),
+                      ),
+                      child: const Text(
+                        'Create a new account',
+                        style: TextStyle(
+                          decoration: TextDecoration.underline,
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
                   ],
                 ),
