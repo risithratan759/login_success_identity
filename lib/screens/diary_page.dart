@@ -1,12 +1,7 @@
-import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
+// lib/screens/diary/diary_page.dart
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import '../services/firestore_service.dart';
-import '../services/storage_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 class DiaryPage extends StatefulWidget {
@@ -17,158 +12,301 @@ class DiaryPage extends StatefulWidget {
 }
 
 class _DiaryPageState extends State<DiaryPage> {
-  final diaryCtl = TextEditingController();
-  final StorageService _storage = StorageService();
-  final FirestoreService _db = FirestoreService();
-  File? pickedImage;
-
-  DateTime selectedDay = DateTime.now();
-
-  Future<void> pickImage() async {
-    final XFile? file =
-        await ImagePicker().pickImage(source: ImageSource.gallery);
-
-    if (file != null) {
-      setState(() {
-        pickedImage = File(file.path);
-      });
-    }
-  }
-
-  Future<void> saveEntry() async {
-    if (diaryCtl.text.trim().isEmpty && pickedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Write something or attach image.")));
-      return;
-    }
-
-    String? imageUrl;
-
-    if (pickedImage != null) {
-      imageUrl = await _storage.uploadDiaryImage(
-          pickedImage!, _db.uid ?? "unknown");
-    }
-
-    await _db.addDiary({
-      'text': diaryCtl.text.trim(),
-      'date': selectedDay,
-      'image': imageUrl,
-    });
-
-    diaryCtl.clear();
-    pickedImage = null;
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Entry saved')));
-  }
-
-  Future<void> exportPDF() async {
-    final pdf = pw.Document();
-
-    final snapshot = await _db.diaryCol().orderBy('createdAt').get();
-
-    for (var doc in snapshot.docs) {
-      final data = doc.data();
-
-      pdf.addPage(
-        pw.Page(
-          build: (context) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                DateFormat.yMMMd().format(data['date'].toDate()),
-                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Text(data['text'] ?? ''),
-              pw.SizedBox(height: 8),
-              if (data['image'] != null)
-                pw.Text("[Image attached: ${data['image']}]"),
-              pw.Divider(),
-            ],
-          ),
-        ),
-      );
-    }
-
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
-  }
+  final user = FirebaseAuth.instance.currentUser!;
+  DateTime _selectedDay = DateTime.now();
+  DateTime _focusedDay = DateTime.now();
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Diary'),
-        actions: [
-          IconButton(onPressed: exportPDF, icon: const Icon(Icons.picture_as_pdf))
-        ],
+        title: const Text("My Diary"),
+        centerTitle: true,
       ),
-      floatingActionButton: FloatingActionButton(
-          onPressed: pickImage, child: const Icon(Icons.image)),
+
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openDiarySheet(),
+        icon: const Icon(Icons.edit),
+        label: const Text("New Entry"),
+      ),
+
       body: Column(
         children: [
-          TableCalendar(
-            focusedDay: selectedDay,
-            firstDay: DateTime(2020),
-            lastDay: DateTime(2030),
-            selectedDayPredicate: (day) => isSameDay(day, selectedDay),
-            onDaySelected: (day, _) => setState(() => selectedDay = day),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: diaryCtl,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: "Write your diary...",
-                border: OutlineInputBorder(),
+          // 📅 Calendar Header
+          Container(
+            margin: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: isDark
+                  ? Colors.black.withOpacity(0.35)
+                  : Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  blurRadius: 20,
+                  color: Colors.black.withOpacity(0.12),
+                ),
+              ],
+            ),
+            child: TableCalendar(
+              firstDay: DateTime.utc(2021),
+              lastDay: DateTime.utc(2035),
+              focusedDay: _focusedDay,
+              selectedDayPredicate: (day) =>
+                  isSameDay(_selectedDay, day),
+              onDaySelected: (selected, focused) {
+                setState(() {
+                  _selectedDay = selected;
+                  _focusedDay = focused;
+                });
+              },
+              calendarStyle: CalendarStyle(
+                todayDecoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withOpacity(0.35),
+                  shape: BoxShape.circle,
+                ),
+                selectedDecoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              headerStyle: const HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
               ),
             ),
           ),
-          if (pickedImage != null)
-            SizedBox(height: 120, child: Image.file(pickedImage!)),
-          ElevatedButton(
-            onPressed: saveEntry,
-            child: const Text("Save Entry"),
-          ),
-          const Divider(height: 20),
+
+          // 📖 Entries
           Expanded(
-            child: StreamBuilder(
-              stream: _db.diaryCol().orderBy('createdAt', descending: true).snapshots(),
-              builder: (context, snap) {
-                if (!snap.hasData) {
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .collection('diary')
+                  .where(
+                    'date',
+                    isGreaterThanOrEqualTo:
+                        Timestamp.fromDate(DateTime(
+                      _selectedDay.year,
+                      _selectedDay.month,
+                      _selectedDay.day,
+                    )),
+                    isLessThan:
+                        Timestamp.fromDate(DateTime(
+                      _selectedDay.year,
+                      _selectedDay.month,
+                      _selectedDay.day + 1,
+                    )),
+                  )
+                  .orderBy('date', descending: true)
+                  .snapshots(),
+
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final docs = snap.data!.docs;
-
-                if (docs.isEmpty) {
-                  return const Center(child: Text("No diary entries yet"));
+                if (snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "No diary entry for this day ✨",
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  );
                 }
 
                 return ListView(
-                  children: docs.map((doc) {
-                    final data = doc.data();
-                    return Card(
-                      margin: const EdgeInsets.all(8),
-                      child: ListTile(
-                        title: Text(data['text'] ?? ''),
-                        subtitle: Text(
-                          DateFormat.yMMMd().format(data['date'].toDate()),
-                        ),
-                        trailing: IconButton(
-                            onPressed: () => _db.deleteDiary(doc.id),
-                            icon: const Icon(Icons.delete, color: Colors.red)),
-                      ),
+                  padding: const EdgeInsets.all(12),
+                  children: snapshot.data!.docs.map((doc) {
+                    return _diaryCard(
+                      doc.id,
+                      doc['title'],
+                      doc['content'],
+                      (doc.data() as Map<String, dynamic>)['mood'] ?? "🙂",
                     );
                   }).toList(),
                 );
               },
             ),
-          )
+          ),
         ],
       ),
     );
+  }
+
+  // 🧾 Modern Diary Card
+  Widget _diaryCard(
+    String id,
+    String title,
+    String content,
+    String mood,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary.withOpacity(0.08),
+            Theme.of(context).colorScheme.primary.withOpacity(0.02),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 16,
+            color: Colors.black.withOpacity(0.1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(mood, style: const TextStyle(fontSize: 26)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              PopupMenuButton(
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text("Edit")),
+                  PopupMenuItem(value: 'delete', child: Text("Delete")),
+                ],
+                onSelected: (v) {
+                  if (v == 'edit') {
+                    _openDiarySheet(
+                      docId: id,
+                      oldTitle: title,
+                      oldContent: content,
+                      oldMood: mood,
+                    );
+                  } else {
+                    _deleteEntry(id);
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            content,
+            style: const TextStyle(fontSize: 15),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✍️ Bottom Sheet Editor
+  void _openDiarySheet({
+    String? docId,
+    String? oldTitle,
+    String? oldContent,
+    String? oldMood,
+  }) {
+    final titleCtrl = TextEditingController(text: oldTitle);
+    final contentCtrl = TextEditingController(text: oldContent);
+    String mood = oldMood ?? "🙂";
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          MediaQuery.of(context).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Write your thoughts ✨",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Mood selector
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: ["😄", "😊", "😐", "😔", "😡"].map((m) {
+                return IconButton(
+                  onPressed: () => setState(() => mood = m),
+                  icon: Text(m, style: const TextStyle(fontSize: 26)),
+                );
+              }).toList(),
+            ),
+
+            TextField(
+              controller: titleCtrl,
+              decoration: const InputDecoration(labelText: "Title"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: contentCtrl,
+              maxLines: 5,
+              decoration: const InputDecoration(labelText: "Your thoughts"),
+            ),
+            const SizedBox(height: 16),
+
+            ElevatedButton(
+              onPressed: () async {
+                final ref = FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .collection('diary');
+
+                if (docId == null) {
+                  await ref.add({
+                    'title': titleCtrl.text,
+                    'content': contentCtrl.text,
+                    'mood': mood,
+                    'date': Timestamp.fromDate(_selectedDay),
+                    'createdAt': Timestamp.now(),
+                  });
+                } else {
+                  await ref.doc(docId).update({
+                    'title': titleCtrl.text,
+                    'content': contentCtrl.text,
+                    'mood': mood,
+                  });
+                }
+
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text("Save Entry"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🗑 Delete
+  Future<void> _deleteEntry(String id) async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('diary')
+        .doc(id)
+        .delete();
   }
 }
