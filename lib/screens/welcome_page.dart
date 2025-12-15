@@ -193,6 +193,7 @@ class WelcomePage extends StatelessWidget {
 */
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:my_card/screens/auth/expense_tracker_page.dart';
 import 'package:my_card/screens/goals_page.dart';
 
 import 'edit_profile_page.dart';
@@ -239,10 +240,7 @@ class WelcomePage extends StatelessWidget {
                 ? Colors.black.withOpacity(0.45)
                 : Colors.white.withOpacity(0.9),
             boxShadow: [
-              BoxShadow(
-                blurRadius: 22,
-                color: Colors.black.withOpacity(0.15),
-              ),
+              BoxShadow(blurRadius: 22, color: Colors.black.withOpacity(0.15)),
             ],
           ),
           child: Column(
@@ -251,8 +249,9 @@ class WelcomePage extends StatelessWidget {
               // 👤 Avatar
               CircleAvatar(
                 radius: 46,
-                backgroundColor:
-                    Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withOpacity(0.15),
                 child: const Icon(Icons.person, size: 50),
               ),
 
@@ -287,7 +286,8 @@ class WelcomePage extends StatelessWidget {
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => const EditProfilePage()),
+                        builder: (_) => const EditProfilePage(),
+                      ),
                     ),
                   ),
                   _dashboardItem(
@@ -305,17 +305,27 @@ class WelcomePage extends StatelessWidget {
                     label: "Commitment",
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(
-                          builder: (_) =>  CommitmentPage()),
+                      MaterialPageRoute(builder: (_) => CommitmentPage()),
                     ),
                   ),
-                  _dashboardItem(
+                  /*_dashboardItem(
                     context,
                     icon: Icons.flag,
                     label: "Goals",
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) =>  GoalsPage()),
+                      MaterialPageRoute(builder: (_) => GoalsPage()),
+                    ),
+                  ),*/
+                  _dashboardItem(
+                    context,
+                    icon: Icons.account_balance_wallet,
+                    label: "Expenses",
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ExpenseTrackerPage(),
+                      ),
                     ),
                   ),
                 ],
@@ -370,13 +380,9 @@ class WelcomePage extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon,
-                size: 36, color: Theme.of(context).colorScheme.primary),
+            Icon(icon, size: 36, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 10),
-            Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
           ],
         ),
       ),
